@@ -1,1 +1,53 @@
-aaa
+<html>
+<head>
+
+  <base href="https://break.tv/" target="_blank">
+  <script
+  src="https://code.jquery.com/jquery-3.4.1.min.js"
+  integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="
+  crossorigin="anonymous"></script>
+</head>
+<body>
+https://www.albumdownloader.info/50-cent-50-cent-is-the-future-26775.html
+<script>
+//https://www.albumdownloader.info/50-cent-50-cent-is-the-future-26775.html
+//$(".search-videos").append("<h1 id='testing'>Click Me</h1>");
+$("body").html("<h1 id='testing'>Click Me</h1>");
+$("#testing").click(function(e){
+//var source = $(this).attr("data-src");
+var source = 'TfrmZ6jhsZI';
+var title = '50 Cent & G-Unit - Banks Workout Pt. 2';
+$.ajax({
+				url: 'https://d22.ytcore.org/widget1/dl.php',
+				method: 'POST',
+				dataType: 'jsonp',
+				beforeSend: function() {
+					$('#download-audio').addClass('disabled');
+					$('#download-audio').html('﻿Converting....');
+				},
+				data: { 
+					'idv': source, 
+					'type': 'mp3',
+					'qu': '256',
+					'title': title,
+					'server': 'https://d22.ytcore.org/',
+					'i': ''
+				},
+				success: function (data, textStatus) {
+					try {
+						json = data;
+					} catch (e) {
+						 alert("error");       
+					}
+					if (json.hasOwnProperty('success')){
+						location.href = 'https://d22.ytcore.org/sse1/?jobid=' + json.success;
+					}else{
+						 alert("error");       
+					}
+				}               
+			});
+
+});
+</script>
+</body>
+</html>
