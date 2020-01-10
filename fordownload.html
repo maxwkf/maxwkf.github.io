@@ -12,11 +12,17 @@ https://www.albumdownloader.info/50-cent-50-cent-is-the-future-26775.html
 <script>
 //https://www.albumdownloader.info/50-cent-50-cent-is-the-future-26775.html
 //$(".search-videos").append("<h1 id='testing'>Click Me</h1>");
-$("body").html("<h1 id='testing'>Click Me</h1>");
+var url_string = window.location.href; //window.location.href
+var url = new URL(url_string);
+var source = url.searchParams.get("source");
+var title = url.searchParams.get("title");
+
+
+$("body").html("<h1 id='testing'>Click Me (" + source + "/ " + title + ")</h1>");
 $("#testing").click(function(e){
 //var source = $(this).attr("data-src");
-var source = 'TfrmZ6jhsZI';
-var title = '50 Cent & G-Unit - Banks Workout Pt. 2';
+//var source = 'TfrmZ6jhsZI';
+//var title = '50 Cent & G-Unit - Banks Workout Pt. 2';
 $.ajax({
 				url: 'https://d22.ytcore.org/widget1/dl.php',
 				method: 'POST',
