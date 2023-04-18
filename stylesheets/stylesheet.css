@@ -1,7 +1,8 @@
 body {
   margin: 0;
   padding: 0;
-  background: #151515 url("../images/bkg.png") 0 0;
+  background: #151515 url("https://media.tenor.com/T7LNqpcJEccAAAAC/stars-night.gif") 0 0;
+  background-repeat: repeat;
   color: #eaeaea;
   font: 16px;
   line-height: 1.5;
