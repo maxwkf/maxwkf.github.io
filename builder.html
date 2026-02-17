@@ -43,6 +43,7 @@
           <button class="btn primary" onclick="runPipeline()">Run</button>
           <button class="btn" onclick="clearPipeline()">Clear</button>
         </div>
+        <div id="functionDescription" class="small" style="margin-top:8px; min-height:36px; color:#9aa">Hover an available function to see its description.</div>
       </div>
 
       <div class="panel">
@@ -63,17 +64,101 @@
     </div>
 
     <script>
-      // Define available functions
+      // Define available functions (include descriptions shown on hover)
       const FUNCTIONS = [
-        { id: 'removeQuotes', name: 'Remove double quotes', fn: s => s.replace(/\"/g, '') },
-        { id: 'formatSQL', name: 'Format SQL', fn: formatSQL },
-        { id: 'whereOrsToIn', name: 'WHERE ORs → IN', fn: whereOrsToIn },
-        { id: 'toUpper', name: 'To UPPERCASE', fn: s => s.toUpperCase() },
-        { id: 'toLower', name: 'To lowercase', fn: s => s.toLowerCase() }
+        {
+          id: 'removeQuotes',
+          name: 'Remove double quotes',
+          fn: s => s == null ? s : s.replace(/\"/g, ''),
+          description: 'Remove all double-quote characters (\"). Example: input: "\"hello\"" → output: "hello"'
+        },
+        {
+          id: 'formatSQL',
+          name: 'Format SQL',
+          fn: formatSQL,
+          description: 'Lightweight SQL formatter: inserts newlines before major keywords and indents clauses. Example: input: "select id,name from users where id=1" → SELECT and columns are placed on separate indented lines.'
+        },
+        {
+          id: 'whereOrsToIn',
+          name: 'WHERE ORs → IN',
+          fn: whereOrsToIn,
+          description: 'Convert simple ORed equality conditions in a WHERE clause into IN(...). Example: "WHERE city = \"London\" OR city = \"Paris\"" → "WHERE city IN(\'London\', \'Paris\')"'
+        },
+        {
+          id: 'toSqlTuples',
+          name: 'To SQL tuple(s)',
+          fn: toSqlTuples,
+          description: 'Convert comma- or tab-separated values into SQL tuple literals. Multi-line input yields one tuple per line. Example: "1,2,three" → (\'1\',\'2\',\'three\')'
+        },
+        {
+          id: 'squeezeSpaces',
+          name: 'Remove duplicate spaces',
+          fn: s => (s == null ? s : s.replace(/ {2,}/g, ' ')),
+          description: 'Collapse consecutive space characters into a single space. Example: "abc   def" → "abc def" (tabs/newlines unchanged).'
+        },
+        {
+          id: 'toUpper',
+          name: 'To UPPERCASE',
+          fn: s => s == null ? s : s.toUpperCase(),
+          description: 'Convert the entire input string to uppercase. Example: "abc" → "ABC"'
+        },
+        {
+          id: 'toLower',
+          name: 'To lowercase',
+          fn: s => s == null ? s : s.toLowerCase(),
+          description: 'Convert the entire input string to lowercase. Example: "ABC" → "abc"'
+        },
+        {
+          id: 'toCamel',
+          name: 'To camelCase',
+          fn: toCamelCase,
+          description: 'Convert text to camelCase per line. Example: "hello world" → "helloWorld"'
+        },
+        {
+          id: 'toPascal',
+          name: 'To PascalCase',
+          fn: toPascalCase,
+          description: 'Convert text to PascalCase per line. Example: "hello world" → "HelloWorld"'
+        },
+        {
+          id: 'toSnake',
+          name: 'To snake_case',
+          fn: toSnakeCase,
+          description: 'Convert text to snake_case per line. Example: "hello world" → "hello_world"'
+        },
+        {
+          id: 'toKebab',
+          name: 'To kebab-case',
+          fn: toKebabCase,
+          description: 'Convert text to kebab-case per line. Example: "hello world" → "hello-world"'
+        }
+        ,
+        {
+          id: 'toTitle',
+          name: 'To Title Case',
+          fn: toTitleCase,
+          description: 'Convert text to Title Case per line. Example: "hello world" → "Hello World"'
+        },
+        {
+          id: 'stripAccents',
+          name: 'Remove accents',
+          fn: removeDiacritics,
+          description: 'Strip diacritics/accents from characters. Example: "résumé" → "resume"'
+        },
+        {
+          id: 'slugify',
+          name: 'Slugify (URL)',
+          fn: slugify,
+          description: 'Create a URL-friendly slug per line. Example: "Hello, World! — 2026" → "hello-world-2026"'
+        }
       ];
 
       // Build UI
       const functionsList = document.getElementById('functionsList');
+      const descEl = document.getElementById('functionDescription');
+      function showDesc(text){ if(!descEl) return; descEl.textContent = text || ''; }
+      function clearDesc(){ if(!descEl) return; descEl.textContent = 'Hover an available function to see its description.'; }
+
       FUNCTIONS.forEach(f => {
         const btn = document.createElement('button');
         btn.className = 'btn';
@@ -81,6 +166,8 @@
         btn.textContent = f.name;
         btn.title = 'Drag into pipeline or click to add';
         btn.onclick = () => addToPipeline(f.id);
+        btn.onmouseenter = () => showDesc(f.description);
+        btn.onmouseleave = () => clearDesc();
         btn.ondragstart = (e) => { e.dataTransfer.setData('text/plain', f.id); };
         functionsList.appendChild(btn);
       });
@@ -152,6 +239,93 @@
       function formatSQL(s){ if(!s) return s; let sql = s.replace(/\s+/g,' ').trim(); const keywords = ['SELECT','FROM','WHERE','GROUP BY','ORDER BY','HAVING','LIMIT','INSERT INTO','VALUES','UPDATE','SET','DELETE','JOIN','INNER JOIN','LEFT JOIN','RIGHT JOIN','FULL JOIN','ON','UNION ALL','UNION','CREATE TABLE','ALTER TABLE','DROP TABLE','WITH']; keywords.sort((a,b)=>b.length-a.length); keywords.forEach(k=>{ const re = new RegExp('\\b'+k.replace(/ /g,'\\s+')+'\\b','ig'); sql = sql.replace(re,'\n'+k); }); const lines = sql.split(/\n+/).map(l=>l.trim()).filter(Boolean); const formatted = []; for(const line of lines){ const upper = line.toUpperCase(); if(/^SELECT\b/i.test(upper)){ const rest = line.replace(/^SELECT\b\s*/i,''); if(!rest){ formatted.push('SELECT'); } else { const cols = rest.split(/\s*,\s*/); formatted.push('SELECT'); cols.forEach((c,idx)=>{ const suffix = idx < cols.length-1 ? ',' : ''; formatted.push('  '+c+suffix); }); } continue; } if(/^(JOIN|INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL JOIN)\b/i.test(upper)){ formatted.push('  '+line); continue; } if(/^ON\b/i.test(upper)){ formatted.push('    '+line); continue; } formatted.push(line); } const out = formatted.map(l=>{ for(const k of keywords){ const re = new RegExp('^'+k.replace(/ /g,'\\s+'),'i'); if(re.test(l)) return l.replace(re,k); } return l; }).join('\n'); return out; }
 
       function whereOrsToIn(s){ if(!s) return s; const m = s.match(/(\bWHERE\b\s*)([\s\S]*?)(?=(?:\b(?:GROUP BY|ORDER BY|LIMIT|HAVING|UNION)\b|$))/i); if(!m) return s; const whereKeyword = m[1]; const whereBody = m[2].replace(/;+\s*$/,'').trim(); const parts = whereBody.split(/\s+OR\s+/i).map(p=>p.trim()); const eqRegex = /^([`"']?\w+[`"']?)\s*=\s*(['"]?)([\s\S]*?)\2$/; const parsed = parts.map(p=>{ const mm = p.match(eqRegex); return mm ? { raw:p, col: mm[1].replace(/^[`"']|[`"']$/g,''), val: mm[3] } : null }); if(parsed.some(x=>x===null)) return s; const colMap = {}; const valMap = {}; parsed.forEach(p=>{ colMap[p.col]=colMap[p.col]||[]; if(!colMap[p.col].includes(p.val)) colMap[p.col].push(p.val); valMap[p.val]=valMap[p.val]||[]; if(!valMap[p.val].includes(p.col)) valMap[p.val].push(p.col); }); const used = new Set(); const exprs = []; for(const col in colMap){ if(colMap[col].length>1){ const values = colMap[col].map(v=>{ const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(v); const escaped = v.replace(/'/g, "''"); return isNum ? escaped : "'"+escaped+"'" }); exprs.push(`${col} IN(${values.join(', ')})`); parsed.forEach(p=>{ if(p.col===col) used.add(p); }); } } for(const val in valMap){ if(valMap[val].length>1){ const cols = valMap[val].filter(c => !colMap[c] || colMap[c].length === 1); if(cols.length>1){ const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(val); const escaped = val.replace(/'/g, "''"); const valueLiteral = isNum ? escaped : "'"+escaped+"'"; exprs.push(`${valueLiteral} IN(${cols.join(', ')})`); parsed.forEach(p=>{ if(p.val===val && cols.includes(p.col)) used.add(p); }); } } } parsed.forEach(p=>{ if(!used.has(p)){ const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(p.val); const escaped = p.val.replace(/'/g, "''"); const valueLiteral = isNum ? escaped : "'"+escaped+"'"; exprs.push(`${p.col} = ${valueLiteral}`); } }); const newWhere = exprs.join(' OR '); const replaced = s.replace(m[0], whereKeyword + newWhere + ' '); return replaced; }
+
+      // Convert a comma- or tab-separated line into SQL tuple form
+      // - single-line: "1,2,3" or "1\t2\t3" -> "('1','2','3')"
+      // - multi-line: each line becomes a tuple; join with commas and keep newlines
+      function toSqlTuples(s){
+        if(s === null || s === undefined) return s;
+        const lines = s.split(/\r?\n/);
+        const outLines = lines.map(line => {
+          if(!line.trim()) return ''; // preserve empty lines as empty
+          // split by comma or tab
+          const parts = line.split(/\t|,/);
+          const escaped = parts.map(p => {
+            const v = p.trim();
+            // escape single quotes
+            const esc = v.replace(/'/g, "''");
+            return `'${esc}'`;
+          });
+          return `(${escaped.join(',')})`;
+        });
+        // If multiple non-empty lines, keep newlines between tuples; otherwise return single tuple
+        return outLines.join('\n');
+      }
+
+      // Case conversion helpers operate per-line and preserve newlines
+      function splitToWords(str){
+        // Normalize separators (spaces, underscores, hyphens, tabs) to a single space
+        return str.replace(/[\t\-\_]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+      }
+
+      function toCamelCase(s){
+        if(s == null) return s;
+        return s.split(/\r?\n/).map(line => {
+          const words = splitToWords(line);
+          if(words.length === 0) return '';
+          return words.map((w,i) => {
+            const lower = w.toLowerCase();
+            if(i === 0) return lower;
+            return lower.charAt(0).toUpperCase() + lower.slice(1);
+          }).join('');
+        }).join('\n');
+      }
+
+      function toPascalCase(s){
+        if(s == null) return s;
+        return s.split(/\r?\n/).map(line => {
+          const words = splitToWords(line);
+          return words.map(w => { const lower = w.toLowerCase(); return lower.charAt(0).toUpperCase() + lower.slice(1); }).join('');
+        }).join('\n');
+      }
+
+      function toSnakeCase(s){
+        if(s == null) return s;
+        return s.split(/\r?\n/).map(line => {
+          const words = splitToWords(line);
+          return words.map(w=>w.toLowerCase()).join('_');
+        }).join('\n');
+      }
+
+      function toKebabCase(s){
+        if(s == null) return s;
+        return s.split(/\r?\n/).map(line => {
+          const words = splitToWords(line);
+          return words.map(w=>w.toLowerCase()).join('-');
+        }).join('\n');
+      }
+
+      // Additional useful transformations
+      function toTitleCase(s){
+        if(s == null) return s;
+        return s.split(/\r?\n/).map(line => {
+          const words = splitToWords(line);
+          return words.map(w => { const lower = w.toLowerCase(); return lower.charAt(0).toUpperCase() + lower.slice(1); }).join(' ');
+        }).join('\n');
+      }
+
+      function removeDiacritics(s){
+        if(s == null) return s;
+        return s.split(/\r?\n/).map(line => line.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')).join('\n');
+      }
+
+      function slugify(s){
+        if(s == null) return s;
+        return s.split(/\r?\n/).map(line => {
+          const bare = line.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          return bare.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').replace(/-+/g, '-');
+        }).join('\n');
+      }
 
     </script>
   </body>
