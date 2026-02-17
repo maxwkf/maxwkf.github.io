@@ -1,1 +1,276 @@
-This is content
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-dark.css" media="screen">
+    <title>String Utilities</title>
+    <style>
+      /* Small overrides for the iframe content */
+      body { background: transparent; }
+      .tool-card { background: rgba(0,0,0,0.6); padding: 20px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+      textarea { width: 100%; height: 180px; background: #0f0f0f; color: #dbecc8; border: 1px solid rgba(181,232,83,0.12); padding: 12px; border-radius: 6px; resize: vertical; }
+      .controls { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 20px 0; }
+      .controls .btn { padding: 8px 14px; border-radius:6px; background: linear-gradient(#222,#111); border:1px solid rgba(0,0,0,0.6); color:#dfe; cursor:pointer; }
+      .controls .btn.strong { background: linear-gradient(#2b5,#174); color: #071; border-color: rgba(16,120,40,0.6); }
+      .row { display:flex; gap:16px; }
+      .col { flex:1; }
+      label.small { display:block; color:#9aa; margin-bottom:6px; font-size:13px; }
+      .meta { color:#8da; font-size:13px; margin-top:8px; }
+    </style>
+  </head>
+  <body>
+    <div class="container" id="main_content">
+      <header>
+        <h1>String Utilities</h1>
+        <h2>Quick string helpers — remove quotes & format SQL</h2>
+      </header>
+
+      <section class="tool-card">
+        <div class="row">
+          <div class="col">
+            <label class="small">Input</label>
+            <textarea id="input" placeholder="Paste text or SQL here..."></textarea>
+            <div class="controls">
+              <button class="btn" onclick="removeQuotes()">Remove all double quotes</button>
+              <button class="btn strong" onclick="formatSQL()">Format SQL</button>
+              <button class="btn" onclick="whereOrsToIn()">Convert WHERE ORs to IN</button>
+              <button class="btn" onclick="toUpperCaseSelection()">Uppercase</button>
+              <button class="btn" onclick="toLowerCaseSelection()">Lowercase</button>
+              <button class="btn" onclick="clearAll()">Clear</button>
+            </div>
+            <div class="meta">Tip: use the formatter for SQL-like text. The formatter is a lightweight, vanilla-JS implementation that inserts newlines before SQL keywords and indents clauses for readability.</div>
+          </div>
+        </div>
+
+        <hr>
+
+        <div>
+          <label class="small">Result</label>
+          <textarea id="result" readonly placeholder="Result will appear here..."></textarea>
+          <div style="margin-top:10px; display:flex; gap:8px;">
+            <button class="btn" onclick="copyResult()">Copy Result</button>
+            <button class="btn" onclick="replaceInputWithResult()">Replace Input with Result</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      function getInput() { return document.getElementById('input').value; }
+      function setResult(v) { document.getElementById('result').value = v; }
+
+      function removeQuotes() {
+        const text = getInput();
+        if (!text) return setResult('');
+        setResult(text.replace(/\"/g, ''));
+      }
+
+      function formatSQL() {
+        let sql = getInput();
+        if (!sql) return setResult('');
+
+        // Normalize whitespace
+        sql = sql.replace(/\s+/g, ' ').trim();
+
+        // Insert a newline before major keywords
+        const keywords = [
+          'SELECT','FROM','WHERE','GROUP BY','ORDER BY','HAVING','LIMIT',
+          'INSERT INTO','VALUES','UPDATE','SET','DELETE','JOIN','INNER JOIN','LEFT JOIN','RIGHT JOIN','FULL JOIN','ON',
+          'UNION ALL','UNION','CREATE TABLE','ALTER TABLE','DROP TABLE','WITH'
+        ];
+
+        // Sort keywords by length desc to ensure multi-word ones are handled first
+        keywords.sort((a,b)=>b.length-a.length);
+
+        // Fix: use proper word-boundary escape (\\b) in the RegExp string
+        keywords.forEach(k => {
+          const re = new RegExp('\\b' + k.replace(/ /g,'\\s+') + '\\b','ig');
+          sql = sql.replace(re, '\n' + k);
+        });
+
+        // Split into lines and trim
+        const lines = sql.split(/\n+/).map(l => l.trim()).filter(Boolean);
+
+        const formattedLines = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const upper = line.toUpperCase();
+
+          // Handle SELECT: put each column on its own indented line
+          if (/^SELECT\b/i.test(upper)) {
+            const rest = line.replace(/^SELECT\b\s*/i, '');
+            if (!rest) {
+              formattedLines.push('SELECT');
+            } else {
+              const cols = rest.split(/\s*,\s*/);
+              formattedLines.push('SELECT');
+              cols.forEach((c, idx) => {
+                const suffix = (idx < cols.length - 1) ? ',' : '';
+                formattedLines.push('  ' + c + suffix);
+              });
+            }
+            continue;
+          }
+
+          // JOINs get one level indent
+          if (/^(JOIN|INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL JOIN)\b/i.test(upper)) {
+            formattedLines.push('  ' + line);
+            continue;
+          }
+
+          // ON clauses get deeper indent
+          if (/^ON\b/i.test(upper)) {
+            formattedLines.push('    ' + line);
+            continue;
+          }
+
+          // Other major clauses at left (FROM, WHERE, GROUP BY, ORDER BY, HAVING, LIMIT, VALUES, SET, UNION, etc.)
+          formattedLines.push(line);
+        }
+
+        // Uppercase clause keywords at line starts
+        const out = formattedLines.map(l => {
+          for (const k of keywords) {
+            const re = new RegExp('^' + k.replace(/ /g,'\\s+'), 'i');
+            if (re.test(l)) {
+              return l.replace(re, k);
+            }
+          }
+          return l;
+        }).join('\n');
+
+        setResult(out);
+      }
+
+      function copyResult(){
+        const r = document.getElementById('result');
+        r.select();
+        document.execCommand('copy');
+      }
+
+      function replaceInputWithResult(){
+        const res = document.getElementById('result').value;
+        if (!res) return;
+        document.getElementById('input').value = res;
+        setResult('');
+      }
+
+      function clearAll(){ document.getElementById('input').value=''; setResult(''); }
+
+      // Convert simple ORed equality conditions in WHERE to IN(...) clauses.
+      // Produces a combination of conversions when possible:
+      // - multiple values for same column -> col IN(val1, val2)
+      // - same value across multiple columns -> value IN(col1, col2)
+      // Leaves non-convertible parts as-is.
+      function whereOrsToIn(){
+        const raw = getInput();
+        if (!raw) return setResult('');
+
+        const m = raw.match(/(\bWHERE\b\s*)([\s\S]*?)(?=(?:\b(?:GROUP BY|ORDER BY|LIMIT|HAVING|UNION)\b|$))/i);
+        if (!m) return setResult(raw);
+
+        const whereKeyword = m[1];
+        // strip trailing semicolons and whitespace from the WHERE body for parsing
+        const whereBody = m[2].replace(/;+\s*$/,'').trim();
+
+        const parts = whereBody.split(/\s+OR\s+/i).map(p => p.trim());
+        const eqRegex = /^([`"']?\w+[`"']?)\s*=\s*(['"]?)([\s\S]*?)\2$/;
+
+        const parsed = parts.map(p => {
+          const mm = p.match(eqRegex);
+          return mm ? { raw: p, col: mm[1].replace(/^[`"']|[`"']$/g,''), val: mm[3] } : null;
+        });
+
+        if (parsed.some(x => x === null)) {
+          // If any part isn't a simple equality, don't attempt conversion
+          return setResult(raw);
+        }
+
+        // Build maps
+        const colMap = {}; // col -> set of values
+        const valMap = {}; // val -> set of cols
+        parsed.forEach(p => {
+          colMap[p.col] = colMap[p.col] || [];
+          if (!colMap[p.col].includes(p.val)) colMap[p.col].push(p.val);
+          valMap[p.val] = valMap[p.val] || [];
+          if (!valMap[p.val].includes(p.col)) valMap[p.val].push(p.col);
+        });
+
+        const used = new Set();
+        const exprs = [];
+
+        // First, convert columns that have multiple values -> col IN(vals)
+        for (const col in colMap) {
+          if (colMap[col].length > 1) {
+            const values = colMap[col].map(v => {
+              const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(v);
+              const escaped = v.replace(/'/g, "''");
+              return isNum ? escaped : "'" + escaped + "'";
+            });
+            exprs.push(`${col} IN(${values.join(', ')})`);
+            // mark pairs as used
+            parsed.forEach(p => { if (p.col === col) used.add(p); });
+          }
+        }
+
+        // Next, convert values that appear on multiple columns -> value IN(col1, col2)
+        for (const val in valMap) {
+          if (valMap[val].length > 1) {
+            // skip cols already consumed by a column-based IN
+            const cols = valMap[val].filter(c => !colMap[c] || colMap[c].length === 1);
+            if (cols.length > 1) {
+              const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(val);
+              const escaped = val.replace(/'/g, "''");
+              const valueLiteral = isNum ? escaped : "'" + escaped + "'";
+              exprs.push(`${valueLiteral} IN(${cols.join(', ')})`);
+              // mark parsed entries used
+              parsed.forEach(p => { if (p.val === val && cols.includes(p.col)) used.add(p); });
+            }
+          }
+        }
+
+        // Remaining single parts -> keep as equality
+        parsed.forEach(p => {
+          if (!used.has(p)) {
+            const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(p.val);
+            const escaped = p.val.replace(/'/g, "''");
+            const valueLiteral = isNum ? escaped : "'" + escaped + "'";
+            exprs.push(`${p.col} = ${valueLiteral}`);
+          }
+        });
+
+        const newWhere = exprs.join(' OR ');
+        const replaced = raw.replace(m[0], whereKeyword + newWhere + ' ');
+        setResult(replaced);
+      }
+
+      function toUpperCaseSelection(){
+        const el = document.getElementById('input');
+        if (el.selectionStart !== el.selectionEnd) {
+          const a = el.value.slice(0, el.selectionStart);
+          const s = el.value.slice(el.selectionStart, el.selectionEnd).toUpperCase();
+          const b = el.value.slice(el.selectionEnd);
+          el.value = a + s + b;
+        } else {
+          el.value = el.value.toUpperCase();
+        }
+      }
+
+      function toLowerCaseSelection(){
+        const el = document.getElementById('input');
+        if (el.selectionStart !== el.selectionEnd) {
+          const a = el.value.slice(0, el.selectionStart);
+          const s = el.value.slice(el.selectionStart, el.selectionEnd).toLowerCase();
+          const b = el.value.slice(el.selectionEnd);
+          el.value = a + s + b;
+        } else {
+          el.value = el.value.toLowerCase();
+        }
+      }
+    </script>
+  </body>
+</html>
