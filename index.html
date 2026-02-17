@@ -9,10 +9,30 @@
     <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print">
 
     <title>Maxwkf.GitHub.io by maxwkf</title>
+    <style>
+      /* Layout the two iframes: menu on the left, content fills the right */
+      html, body { height: 100%; }
+      body { margin: 0; }
+      .app-shell { display: flex; height: 100vh; min-height: 100vh; }
+      .app-shell aside { width: 260px; min-width: 180px; border-right: 1px dashed rgba(181,232,83,0.12); }
+      .app-shell main { flex: 1; }
+      .app-shell iframe { width: 100%; height: 100%; border: 0; display: block; }
+      @media (max-width: 600px) {
+        .app-shell { flex-direction: column; }
+        .app-shell aside { width: 100%; height: 220px; min-width: auto; }
+        .app-shell main { height: calc(100vh - 220px); }
+      }
+    </style>
   </head>
 
   <body>
-    <iframe src="menu.html" name="iframe_menu"></iframe>
-    <iframe src="content.html" name="iframe_content"></iframe>
+    <div class="app-shell">
+      <aside>
+        <iframe src="menu.html" name="iframe_menu"></iframe>
+      </aside>
+      <main>
+        <iframe src="content.html" name="iframe_content"></iframe>
+      </main>
+    </div>
   </body>
 </html>
