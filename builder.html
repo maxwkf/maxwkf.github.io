@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Build Pipeline</title>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-dark.css" media="screen">
+    <style>
+      body{ background:transparent; color:#dfe; font-family: sans-serif; padding:18px }
+      .cols{ display:flex; gap:12px }
+      .panel{ background:rgba(0,0,0,0.6); padding:12px; border-radius:8px; flex:1 }
+      .available button{ display:block; width:100%; margin-bottom:8px; text-align:left }
+      textarea{ width:100%; height:160px; background:#0f0f0f; color:#dbecc8; border:1px solid rgba(181,232,83,0.12); padding:12px; border-radius:6px }
+      .pipeline-list{ min-height:160px; border:2px dashed rgba(181,232,83,0.12); padding:8px; border-radius:6px }
+      .pipeline-item{ background:rgba(16,24,16,0.6); padding:8px; margin:6px 0; border-radius:6px; display:flex; align-items:center; gap:8px }
+      .pipeline-item.dragging{ opacity:0.4 }
+      .btn{ padding:6px 8px; border-radius:6px; cursor:pointer; background:linear-gradient(#222,#111); color:#dfe; border:1px solid rgba(0,0,0,0.6) }
+      .btn.primary{ background:linear-gradient(#2b5,#174); color:#071; border-color: rgba(16,120,40,0.6) }
+      .small{ font-size:13px; color:#9aa }
+      .controls{ margin-top:8px; display:flex; gap:8px }
+    </style>
+  </head>
+  <body>
+    <h1>Build Pipeline</h1>
+    <p class="small">Drag functions from the left into the pipeline, reorder them, then run the pipeline on the input text.</p>
+
+    <div class="cols">
+      <div class="panel available" style="max-width:240px">
+        <h3>Available Functions</h3>
+        <div id="functionsList">
+          <!-- Buttons populated by script -->
+        </div>
+        <p class="small">You can also drag function names into the pipeline area.</p>
+      </div>
+
+      <div class="panel" style="flex:1.2">
+        <h3>Pipeline</h3>
+        <div id="pipeline" class="pipeline-list" ondragover="event.preventDefault()" ondrop="onDropToPipeline(event)">
+          <div class="small" id="pipelineHint">(Drop functions here)</div>
+        </div>
+        <div class="controls">
+          <button class="btn primary" onclick="runPipeline()">Run</button>
+          <button class="btn" onclick="clearPipeline()">Clear</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Input</h3>
+        <textarea id="input" placeholder="Enter input string here..."></textarea>
+        <div style="margin-top:8px; display:flex; gap:8px">
+          <button class="btn" onclick="loadSample()">Load sample</button>
+          <button class="btn" onclick="clearInput()">Clear</button>
+        </div>
+
+        <h3 style="margin-top:12px">Output</h3>
+        <textarea id="output" readonly placeholder="Output will appear here..."></textarea>
+        <div style="margin-top:8px; display:flex; gap:8px">
+          <button class="btn" onclick="copyOutput()">Copy</button>
+          <button class="btn" onclick="replaceInputWithOutput()">Use as input</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Define available functions
+      const FUNCTIONS = [
+        { id: 'removeQuotes', name: 'Remove double quotes', fn: s => s.replace(/\"/g, '') },
+        { id: 'formatSQL', name: 'Format SQL', fn: formatSQL },
+        { id: 'whereOrsToIn', name: 'WHERE ORs → IN', fn: whereOrsToIn },
+        { id: 'toUpper', name: 'To UPPERCASE', fn: s => s.toUpperCase() },
+        { id: 'toLower', name: 'To lowercase', fn: s => s.toLowerCase() }
+      ];
+
+      // Build UI
+      const functionsList = document.getElementById('functionsList');
+      FUNCTIONS.forEach(f => {
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.draggable = true;
+        btn.textContent = f.name;
+        btn.title = 'Drag into pipeline or click to add';
+        btn.onclick = () => addToPipeline(f.id);
+        btn.ondragstart = (e) => { e.dataTransfer.setData('text/plain', f.id); };
+        functionsList.appendChild(btn);
+      });
+
+      const pipelineEl = document.getElementById('pipeline');
+      let pipeline = []; // array of function ids
+
+      function addToPipeline(id, index) {
+        // remove hint
+        const hint = document.getElementById('pipelineHint'); if(hint) hint.style.display='none';
+        const f = FUNCTIONS.find(x=>x.id===id); if(!f) return;
+        const item = document.createElement('div');
+        item.className = 'pipeline-item';
+        item.draggable = true;
+        item.dataset.fn = id;
+        item.innerHTML = `<span style="flex:1">${f.name}</span><button class="btn" title="Remove" onclick="removePipelineItem(this)">✕</button><button class="btn" title="Move up" onclick="moveUp(this)">▲</button><button class="btn" title="Move down" onclick="moveDown(this)">▼</button>`;
+        // drag handlers for reordering
+        item.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/x-pipeline-index', Array.prototype.indexOf.call(pipelineEl.children, item)); item.classList.add('dragging'); });
+        item.addEventListener('dragend', (e) => { item.classList.remove('dragging'); });
+        item.addEventListener('dragover', (e) => { e.preventDefault(); });
+        item.addEventListener('drop', (e) => { e.preventDefault(); onDropOnItem(e, item); });
+
+        if (typeof index === 'number' && index >= 0 && index < pipelineEl.children.length) {
+          pipelineEl.insertBefore(item, pipelineEl.children[index]);
+        } else {
+          pipelineEl.appendChild(item);
+        }
+        refreshPipelineArray();
+      }
+
+      function removePipelineItem(btn) {
+        const item = btn.parentElement;
+        item.remove();
+        refreshPipelineArray();
+      }
+
+      function moveUp(btn){ const item = btn.parentElement; const prev = item.previousElementSibling; if(prev) pipelineEl.insertBefore(item, prev); refreshPipelineArray(); }
+      function moveDown(btn){ const item = btn.parentElement; const next = item.nextElementSibling; if(next) pipelineEl.insertBefore(next, item); refreshPipelineArray(); }
+
+      function refreshPipelineArray(){ pipeline = Array.from(pipelineEl.children).filter(c=>c.dataset && c.dataset.fn).map(c=>c.dataset.fn); }
+
+      function clearPipeline(){ pipelineEl.innerHTML = '<div class="small" id="pipelineHint">(Drop functions here)</div>'; pipeline = []; }
+
+      function onDropToPipeline(e){ e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); if(id) { addToPipeline(id); return; } // handle drop from pipeline reorder
+        const srcIndex = parseInt(e.dataTransfer.getData('application/x-pipeline-index'),10);
+        if(!isNaN(srcIndex)) {
+          // move to end or compute target index
+          const children = Array.from(pipelineEl.children).filter(c=>c.dataset && c.dataset.fn);
+          const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+          let idx = children.length; if(targetEl && targetEl.parentElement===pipelineEl){ idx = Array.prototype.indexOf.call(pipelineEl.children, targetEl); }
+          const item = pipelineEl.children[srcIndex]; if(item) {
+            if(idx >= pipelineEl.children.length) pipelineEl.appendChild(item); else pipelineEl.insertBefore(item, pipelineEl.children[idx]);
+            refreshPipelineArray();
+          }
+        }
+      }
+
+      function onDropOnItem(e, targetItem){ const srcIndex = parseInt(e.dataTransfer.getData('application/x-pipeline-index'),10); if(isNaN(srcIndex)) return; const children = Array.from(pipelineEl.children); const srcItem = children[srcIndex]; if(!srcItem || srcItem===targetItem) return; pipelineEl.insertBefore(srcItem, targetItem); refreshPipelineArray(); }
+
+      // Pipeline execution
+      function runPipeline(){ let v = document.getElementById('input').value; pipeline = Array.from(pipelineEl.children).filter(c=>c.dataset && c.dataset.fn).map(c=>c.dataset.fn); try{ pipeline.forEach(id => { const f = FUNCTIONS.find(x=>x.id===id); if(f) v = f.fn(v); }); document.getElementById('output').value = v; } catch(err){ alert('Error running pipeline: '+err.message); } }
+
+      function copyOutput(){ const o = document.getElementById('output'); o.select(); document.execCommand('copy'); }
+      function replaceInputWithOutput(){ const out = document.getElementById('output').value; if(!out) return; document.getElementById('input').value = out; }
+      function clearInput(){ document.getElementById('input').value = ''; }
+      function loadSample(){ document.getElementById('input').value = `SELECT id, name FROM users WHERE city = 'London' OR city = 'Paris' OR country = 'UK';`; }
+
+      // Implementations used by pipeline
+      function formatSQL(s){ if(!s) return s; let sql = s.replace(/\s+/g,' ').trim(); const keywords = ['SELECT','FROM','WHERE','GROUP BY','ORDER BY','HAVING','LIMIT','INSERT INTO','VALUES','UPDATE','SET','DELETE','JOIN','INNER JOIN','LEFT JOIN','RIGHT JOIN','FULL JOIN','ON','UNION ALL','UNION','CREATE TABLE','ALTER TABLE','DROP TABLE','WITH']; keywords.sort((a,b)=>b.length-a.length); keywords.forEach(k=>{ const re = new RegExp('\\b'+k.replace(/ /g,'\\s+')+'\\b','ig'); sql = sql.replace(re,'\n'+k); }); const lines = sql.split(/\n+/).map(l=>l.trim()).filter(Boolean); const formatted = []; for(const line of lines){ const upper = line.toUpperCase(); if(/^SELECT\b/i.test(upper)){ const rest = line.replace(/^SELECT\b\s*/i,''); if(!rest){ formatted.push('SELECT'); } else { const cols = rest.split(/\s*,\s*/); formatted.push('SELECT'); cols.forEach((c,idx)=>{ const suffix = idx < cols.length-1 ? ',' : ''; formatted.push('  '+c+suffix); }); } continue; } if(/^(JOIN|INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL JOIN)\b/i.test(upper)){ formatted.push('  '+line); continue; } if(/^ON\b/i.test(upper)){ formatted.push('    '+line); continue; } formatted.push(line); } const out = formatted.map(l=>{ for(const k of keywords){ const re = new RegExp('^'+k.replace(/ /g,'\\s+'),'i'); if(re.test(l)) return l.replace(re,k); } return l; }).join('\n'); return out; }
+
+      function whereOrsToIn(s){ if(!s) return s; const m = s.match(/(\bWHERE\b\s*)([\s\S]*?)(?=(?:\b(?:GROUP BY|ORDER BY|LIMIT|HAVING|UNION)\b|$))/i); if(!m) return s; const whereKeyword = m[1]; const whereBody = m[2].replace(/;+\s*$/,'').trim(); const parts = whereBody.split(/\s+OR\s+/i).map(p=>p.trim()); const eqRegex = /^([`"']?\w+[`"']?)\s*=\s*(['"]?)([\s\S]*?)\2$/; const parsed = parts.map(p=>{ const mm = p.match(eqRegex); return mm ? { raw:p, col: mm[1].replace(/^[`"']|[`"']$/g,''), val: mm[3] } : null }); if(parsed.some(x=>x===null)) return s; const colMap = {}; const valMap = {}; parsed.forEach(p=>{ colMap[p.col]=colMap[p.col]||[]; if(!colMap[p.col].includes(p.val)) colMap[p.col].push(p.val); valMap[p.val]=valMap[p.val]||[]; if(!valMap[p.val].includes(p.col)) valMap[p.val].push(p.col); }); const used = new Set(); const exprs = []; for(const col in colMap){ if(colMap[col].length>1){ const values = colMap[col].map(v=>{ const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(v); const escaped = v.replace(/'/g, "''"); return isNum ? escaped : "'"+escaped+"'" }); exprs.push(`${col} IN(${values.join(', ')})`); parsed.forEach(p=>{ if(p.col===col) used.add(p); }); } } for(const val in valMap){ if(valMap[val].length>1){ const cols = valMap[val].filter(c => !colMap[c] || colMap[c].length === 1); if(cols.length>1){ const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(val); const escaped = val.replace(/'/g, "''"); const valueLiteral = isNum ? escaped : "'"+escaped+"'"; exprs.push(`${valueLiteral} IN(${cols.join(', ')})`); parsed.forEach(p=>{ if(p.val===val && cols.includes(p.col)) used.add(p); }); } } } parsed.forEach(p=>{ if(!used.has(p)){ const isNum = /^[-+]?\d+(?:\.\d+)?$/.test(p.val); const escaped = p.val.replace(/'/g, "''"); const valueLiteral = isNum ? escaped : "'"+escaped+"'"; exprs.push(`${p.col} = ${valueLiteral}`); } }); const newWhere = exprs.join(' OR '); const replaced = s.replace(m[0], whereKeyword + newWhere + ' '); return replaced; }
+
+    </script>
+  </body>
+</html>
